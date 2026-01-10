@@ -29,7 +29,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var showingSheet = false
     @State private var numbers: [Int] = []
-    @State private var currentNumber = 1
+    @State private var currentNumber = UserDefaults.standard.integer(forKey: "Tap")
     
     var body: some View {
         NavigationStack{
@@ -45,6 +45,8 @@ struct ContentView: View {
                 Button("Add Number"){
                     numbers.append(currentNumber)
                     currentNumber += 1
+                    
+                    UserDefaults.standard.set(currentNumber, forKey: "Tap")
                 }
                 
             }
