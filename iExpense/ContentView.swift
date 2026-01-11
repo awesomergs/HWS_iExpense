@@ -8,76 +8,74 @@
 import Observation
 import SwiftUI
 
-// @Observable //A 'macro' - Swifts way of rewriting our code for additional functionality. Can right click and go to 'expand macro'
-//class User{
-//    var firstName = "Bilbo"
-//    var lastName = "Baggins"
-//}
-//
-//struct SecondView: View {
-//    @Environment(\.dismiss) var dismiss
-//    let name: String
-//    
-//    var body: some View{
-//        // Text("Hello, \(name)!")
-//        Button("Dismiss"){
-//            dismiss()
-//        }
-//    }
-//}
+struct ExpenseItem: Identifiable, Codable {
+    var id = UUID()
+    let name: String
+    let type: String
+    let amount: Double
+}
 
-struct ContentView: View {
-    @State private var showingSheet = false
-    @State private var numbers: [Int] = []
-    @State private var currentNumber = UserDefaults.standard.integer(forKey: "Tap")
-    
-    var body: some View {
-        NavigationStack{
-            VStack{
-                List{
-                    ForEach(numbers, id: \.self){
-                        Text("Row \($0)")
-                    }
-                    .onDelete(perform: removeRows(_:))
-                }
-                
-                
-                Button("Add Number"){
-                    numbers.append(currentNumber)
-                    currentNumber += 1
-                    
-                    UserDefaults.standard.set(currentNumber, forKey: "Tap")
-                }
-                
-            }
-            .toolbar{
-                EditButton()
+@Observable
+class Expenses{
+    var items = [ExpenseItem](){
+        didSet {
+            if let encoded = try? JSONEncoder().encode(items){
+                 UserDefaults.standard.set(encoded, forKey: "Items")
             }
         }
     }
     
-    func removeRows(_ offsets: IndexSet){
-        numbers.remove(atOffsets: offsets)
+    init() {
+        if let savedItems = UserDefaults.standard.data(forKey: "Items"),
+           let decodedItems = try? JSONDecoder().decode([ExpenseItem].self, from: savedItems){
+            items = decodedItems
+            return
+        }else{
+            items = []
+        }
+    }
+}
+
+struct ContentView: View {
+    @State private var expenses = Expenses()
+    @State private var showingAddExpense = false
+    
+    
+    var body: some View {
+        NavigationStack{
+            List{
+                ForEach(expenses.items) { item in
+                    HStack{
+                        VStack(alignment: .leading){
+                            Text(item.name).font(.headline)
+                            Text(item.type)
+                        }
+                         
+                        Spacer()
+                        
+                        Text(item.amount, format: .currency(code: "USD"))
+                        
+                    }
+                }.onDelete(perform: removeItems)
+            }
+            .navigationTitle("Expenses")
+            .toolbar {
+                    Button("Add Expense", systemImage: "plus"){
+                        showingAddExpense = true
+                    }
+                }
+            .sheet(isPresented: $showingAddExpense) {
+                AddView(expenses: expenses)
+            }
+        }
     }
     
+    func removeItems(_ offsets: IndexSet){
+        expenses.items.remove(atOffsets: offsets)
+    }
 }
 
 #Preview {
     ContentView()
 }
 
-
-
-//            TextField("First Name:", text: $user.firstName)
-//                .padding(20)
-//            TextField("Last Name:", text: $user.lastName)
-//                .padding(20)
-//
-//            Spacer()
-//
-//            Button("Show Sheet"){
-//                showingSheet.toggle()
-//            }
-//            .sheet(isPresented: $showingSheet){
-//                SecondView(name: user.firstName + " " + user.lastName)
-//            }
