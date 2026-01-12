@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  iExpense
-//
-//  Created by Rohan George on 1/10/26.
-//
-
 import Observation
 import SwiftUI
 
@@ -14,7 +7,32 @@ struct ExpenseItem: Identifiable, Codable {
     let type: String
     let amount: Double
     let currency: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, amount, currency
+    }
+
+    init(id: UUID = UUID(), name: String, type: String, amount: Double, currency: String) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.amount = amount
+        self.currency = currency
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decode(String.self, forKey: .name)
+        type = try c.decode(String.self, forKey: .type)
+        amount = try c.decode(Double.self, forKey: .amount)
+
+        // ✅ If older saved data doesn’t have "currency", default to USD
+        currency = try c.decodeIfPresent(String.self, forKey: .currency) ?? "USD"
+    }
 }
+
 
 @Observable
 class Expenses{
@@ -47,6 +65,7 @@ struct ContentView: View {
             List{
                 ForEach(expenses.items) { item in
                     HStack{
+                        Text(item.amount < 10 ? "🟢" : item.amount < 100 ? "🟡" : "🔴")
                         VStack(alignment: .leading){
                             Text(item.name).font(.headline)
                             Text(item.type)
