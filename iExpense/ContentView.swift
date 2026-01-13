@@ -43,7 +43,7 @@ class Expenses{
             }
         }
     }
-    
+
     init() {
         if let savedItems = UserDefaults.standard.data(forKey: "Items"),
            let decodedItems = try? JSONDecoder().decode([ExpenseItem].self, from: savedItems){
@@ -58,8 +58,8 @@ class Expenses{
 struct ContentView: View {
     @State private var expenses = Expenses()
     @State private var showingAddExpense = false
-    
-    
+
+
     var body: some View {
         NavigationStack{
             List{
@@ -70,11 +70,11 @@ struct ContentView: View {
                             Text(item.name).font(.headline)
                             Text(item.type)
                         }
-                         
+
                         Spacer()
-                        
+
                         Text(item.amount, format: .currency(code: item.currency))
-                        
+
                     }
                 }.onDelete(perform: removeItems)
             }
@@ -89,7 +89,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     func removeItems(_ offsets: IndexSet){
         expenses.items.remove(atOffsets: offsets)
     }
