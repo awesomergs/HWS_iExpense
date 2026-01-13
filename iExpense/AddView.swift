@@ -15,58 +15,127 @@ struct AddView: View {
     @State private var name: String = ""
     @State private var type: String = "Personal"
 
-    // ✅ keep user input as text
+    //  keep user input as text
     @State private var amountText: String = ""
 
     @State private var currency: Currency = .usd
 
-    // ✅ alert state
+    //  NEW
+    @State private var date: Date = .now
+    @State private var store: String = ""
+    @State private var details: String = ""
+
+    //  store search
+    @State private var storeSearch: String = ""
+
+    //  alert state
     @State private var showInvalidAmountAlert = false
 
     var expenses: Expenses
     let types = ["Business", "Personal"]
 
+    let storeOptions = [
+        "Amazon",
+        "Target",
+        "Trader Joe's",
+        "Starbucks",
+        "Chipotle",
+        "Uber",
+        "Lyft",
+        "Apple",
+        "Waymo",
+        "RTCC",
+        "USC Bookstore",
+        "Other"
+    ]
+
+    var filteredStores: [String] {
+        let q = storeSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return storeOptions }
+        return storeOptions.filter { $0.localizedCaseInsensitiveContains(q) }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Name", text: $name)
+                Section("Basic") {
+                    TextField("Name", text: $name)
 
-                Picker("Type:", selection: $type) {
-                    ForEach(types, id: \.self) { Text($0) }
+                    Picker("Type:", selection: $type) {
+                        ForEach(types, id: \.self) { Text($0) }
+                    }
+
+                    HStack {
+                        TextField("Amount", text: $amountText)
+                            .keyboardType(.decimalPad)
+
+                        Picker("Currency", selection: $currency) {
+                            ForEach(Currency.allCases) { c in
+                                Text(c.rawValue).tag(c)
+                            }
+                        }
+                        .labelsHidden()
+                    }
                 }
 
-                HStack {
-                    TextField("Amount", text: $amountText)
-                        .keyboardType(.decimalPad)
+                //  NEW: date/time defaults to now, but editable
+                Section("When") {
+                    DatePicker(
+                        "Date & Time",
+                        selection: $date,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                }
 
-                    Picker("Currency", selection: $currency) {
-                        ForEach(Currency.allCases) { c in
-                            Text(c.rawValue).tag(c)
+                //  NEW: searchable hardcoded stores
+                Section("Store") {
+                    TextField("Search stores", text: $storeSearch)
+
+                    Picker("Select store", selection: $store) {
+                        Text("Select…").tag("")
+                        ForEach(filteredStores, id: \.self) { s in
+                            Text(s).tag(s)
                         }
                     }
-                    .labelsHidden()
+
+                    if store.isEmpty {
+                        Text("Pick a store (or choose “Other”).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                //  NEW: optional description
+                Section("Description (optional)") {
+                    TextField("Notes, items, why you bought it…", text: $details, axis: .vertical)
+                        .lineLimit(3...6)
                 }
             }
             .navigationTitle("Add New Expense")
             .toolbar {
                 Button("Save") {
-                    // ✅ allow "12.34" or "12,34" (we normalize comma -> dot)
                     let cleaned = amountText
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                         .replacingOccurrences(of: ",", with: ".")
 
-                    // ✅ reject empty or non-numeric input (also rejects "$12", "12USD", etc.)
                     guard let amount = Double(cleaned), amount.isFinite else {
                         showInvalidAmountAlert = true
                         return
                     }
 
+                    // If user never picked a store, keep it safe
+                    let finalStore = store.isEmpty ? "Unknown" : store
+
                     let item = ExpenseItem(
                         name: name,
                         type: type,
                         amount: amount,
-                        currency: currency.rawValue
+                        currency: currency.rawValue,
+                        date: date,
+                        store: finalStore,
+                        details: details // can be blank
                     )
+
                     expenses.items.append(item)
                     dismiss()
                 }
@@ -75,6 +144,10 @@ struct AddView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text("Please enter numbers only (example: 12.34).")
+            }
+            .onAppear {
+                // ensure it auto-sets to "now" when sheet opens
+                date = .now
             }
         }
     }
