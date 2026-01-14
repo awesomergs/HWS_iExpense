@@ -38,11 +38,7 @@ enum ExpenseCategory: String, CaseIterable, Identifiable, Codable {
     // Backward-compat mapping for old saved values like "Business"/"Personal"
     static func fromLegacyTypeString(_ s: String) -> ExpenseCategory {
         let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // If it matches one of our rawValues exactly, use it.
         if let exact = ExpenseCategory(rawValue: trimmed) { return exact }
-
-        // Handle old app values
         switch trimmed.lowercased() {
         case "business", "personal":
             return .other
@@ -109,7 +105,6 @@ struct ExpenseItem: Identifiable, Codable {
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try c.decode(String.self, forKey: .name)
 
-        // ✅ Backward compatible decoding: old "type" strings become a category
         let decodedType = try c.decodeIfPresent(String.self, forKey: .type) ?? "Other"
         category = ExpenseCategory.fromLegacyTypeString(decodedType)
 
@@ -137,21 +132,40 @@ class Expenses {
         if let savedItems = UserDefaults.standard.data(forKey: "Items"),
            let decodedItems = try? JSONDecoder().decode([ExpenseItem].self, from: savedItems) {
             items = decodedItems
-            return
         } else {
             items = []
         }
     }
 }
 
+// ✅ Root tab view
 struct ContentView: View {
     @State private var expenses = Expenses()
+
+    var body: some View {
+        TabView {
+            ExpensesListView(expenses: expenses)
+                .tabItem {
+                    Label("Expenses", systemImage: "list.bullet")
+                }
+
+            StatsView(expenses: expenses)
+                .tabItem {
+                    Label("Stats", systemImage: "chart.bar")
+                }
+        }
+    }
+}
+
+// ✅ Your list moved into its own view
+struct ExpensesListView: View {
     @State private var showingAddExpense = false
-    
+    var expenses: Expenses
+
+    // ✅ Recency sort (newest first)
     var sortedItems: [ExpenseItem] {
         expenses.items.sorted { $0.date > $1.date }
     }
-
 
     var body: some View {
         NavigationStack {
@@ -171,8 +185,8 @@ struct ContentView: View {
                             }
 
                             let isToday = Calendar.current.isDateInToday(item.date)
-                            let isYear: Bool = Calendar.current.component(.year, from: item.date) ==
-                                               Calendar.current.component(.year, from: Date())
+                            let isYear = Calendar.current.component(.year, from: item.date) ==
+                                         Calendar.current.component(.year, from: Date())
 
                             if isToday {
                                 Text("\(item.date, format: .dateTime.hour().minute()) · \(item.store)")
@@ -208,7 +222,10 @@ struct ContentView: View {
     }
 
     func removeItems(_ offsets: IndexSet) {
-        expenses.items.remove(atOffsets: offsets)
+        // IMPORTANT: deleting from sorted view needs mapping back to original indices
+        // We'll delete by id to be safe.
+        let idsToDelete = offsets.map { sortedItems[$0].id }
+        expenses.items.removeAll { idsToDelete.contains($0.id) }
     }
 }
 
