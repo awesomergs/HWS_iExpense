@@ -1,10 +1,64 @@
 import Observation
 import SwiftUI
 
+// ✅ NEW: categories with emoji
+enum ExpenseCategory: String, CaseIterable, Identifiable, Codable {
+    case food = "Food"
+    case transport = "Transport"
+    case entertainment = "Entertainment"
+    case clothes = "Clothes"
+    case gift = "Gift"
+    case education = "Education / Schoolwork"
+    case health = "Health"
+    case home = "Home / Living"
+    case fees = "Fees & Charges"
+    case videoGames = "Video Games"
+    case projects = "Projects"
+    case other = "Other"
+
+    var id: String { rawValue }
+
+    var emoji: String {
+        switch self {
+        case .food: return "🍽️"
+        case .transport: return "🚗"
+        case .entertainment: return "🎟️"
+        case .clothes: return "👕"
+        case .gift: return "🎁"
+        case .education: return "📚"
+        case .health: return "🩺"
+        case .home: return "🏠"
+        case .fees: return "💸"
+        case .videoGames: return "🎮"
+        case .projects: return "🛠️"
+        case .other: return "📦"
+        }
+    }
+
+    // Backward-compat mapping for old saved values like "Business"/"Personal"
+    static func fromLegacyTypeString(_ s: String) -> ExpenseCategory {
+        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // If it matches one of our rawValues exactly, use it.
+        if let exact = ExpenseCategory(rawValue: trimmed) { return exact }
+
+        // Handle old app values
+        switch trimmed.lowercased() {
+        case "business", "personal":
+            return .other
+        default:
+            return .other
+        }
+    }
+}
+
 struct ExpenseItem: Identifiable, Codable {
     var id = UUID()
     let name: String
-    let type: String
+
+    // ✅ CHANGED: now category, but stored under "type" key for backward compatibility
+    let category: ExpenseCategory
+
     let amount: Double
     let currency: String
 
@@ -19,7 +73,7 @@ struct ExpenseItem: Identifiable, Codable {
     init(
         id: UUID = UUID(),
         name: String,
-        type: String,
+        category: ExpenseCategory,
         amount: Double,
         currency: String,
         date: Date = .now,
@@ -28,7 +82,7 @@ struct ExpenseItem: Identifiable, Codable {
     ) {
         self.id = id
         self.name = name
-        self.type = type
+        self.category = category
         self.amount = amount
         self.currency = currency
         self.date = date
@@ -36,15 +90,32 @@ struct ExpenseItem: Identifiable, Codable {
         self.details = details
     }
 
+    // ✅ Manual encode so we keep using the "type" key (migration-safe)
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(category.rawValue, forKey: .type)
+        try c.encode(amount, forKey: .amount)
+        try c.encode(currency, forKey: .currency)
+        try c.encode(date, forKey: .date)
+        try c.encode(store, forKey: .store)
+        try c.encode(details, forKey: .details)
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
 
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try c.decode(String.self, forKey: .name)
-        type = try c.decode(String.self, forKey: .type)
+
+        // ✅ Backward compatible decoding: old "type" strings become a category
+        let decodedType = try c.decodeIfPresent(String.self, forKey: .type) ?? "Other"
+        category = ExpenseCategory.fromLegacyTypeString(decodedType)
+
         amount = try c.decode(Double.self, forKey: .amount)
 
-        // Backward compatible defaults !!
+        // Backward compatible defaults
         currency = try c.decodeIfPresent(String.self, forKey: .currency) ?? "USD"
         date = try c.decodeIfPresent(Date.self, forKey: .date) ?? .now
         store = try c.decodeIfPresent(String.self, forKey: .store) ?? "Other"
@@ -61,7 +132,7 @@ class Expenses {
             }
         }
     }
-    
+
     init() {
         if let savedItems = UserDefaults.standard.data(forKey: "Items"),
            let decodedItems = try? JSONDecoder().decode([ExpenseItem].self, from: savedItems) {
@@ -76,13 +147,19 @@ class Expenses {
 struct ContentView: View {
     @State private var expenses = Expenses()
     @State private var showingAddExpense = false
+    
+    var sortedItems: [ExpenseItem] {
+        expenses.items.sorted { $0.date > $1.date }
+    }
+
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(expenses.items) { item in
+                ForEach(sortedItems) { item in
                     HStack(spacing: 12) {
-                        Text(item.amount < 10 ? "🟢" : item.amount < 100 ? "🟡" : "🔴")
+                        Text(item.category.emoji)
+                            .font(.title3)
 
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -92,28 +169,26 @@ struct ContentView: View {
                                 Text(item.amount, format: .currency(code: item.currency))
                                     .font(.headline)
                             }
-                            
+
                             let isToday = Calendar.current.isDateInToday(item.date)
-                            let isYear: Bool = Calendar.current.component(.year, from: item.date) == Calendar.current.component(.year, from: Date())
+                            let isYear: Bool = Calendar.current.component(.year, from: item.date) ==
+                                               Calendar.current.component(.year, from: Date())
 
                             if isToday {
                                 Text("\(item.date, format: .dateTime.hour().minute()) · \(item.store)")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             } else {
-                                if isYear{
+                                if isYear {
                                     Text("\(item.date, format: .dateTime.month().day()) · \(item.store)")
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
-                                }
-                                else {
+                                } else {
                                     Text("\(item.date, format: .dateTime.month().day().year()) · \(item.store)")
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
                                 }
                             }
-
-
                         }
                     }
                     .padding(.vertical, 4)

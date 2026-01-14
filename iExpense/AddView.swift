@@ -13,31 +13,33 @@ struct AddView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var name: String = ""
-    @State private var type: String = "Personal"
 
-    //  keep user input as text
+    // ✅ CHANGED: category instead of "Business/Personal"
+    @State private var category: ExpenseCategory = .food
+
+    // keep user input as text
     @State private var amountText: String = ""
 
     @State private var currency: Currency = .usd
 
-    //  NEW
+    // NEW
     @State private var date: Date = .now
     @State private var store: String = ""
     @State private var details: String = ""
 
-    //  store search
+    // store search
     @State private var storeSearch: String = ""
 
-    //  alert state
+    // alert state
     @State private var showInvalidAmountAlert = false
 
     var expenses: Expenses
-    let types = ["Business", "Personal"]
 
     let storeOptions = [
         "Amazon",
         "Target",
         "Trader Joe's",
+        "Taco Bell",
         "Starbucks",
         "Chipotle",
         "Uber",
@@ -61,8 +63,10 @@ struct AddView: View {
                 Section("Basic") {
                     TextField("Name", text: $name)
 
-                    Picker("Type:", selection: $type) {
-                        ForEach(types, id: \.self) { Text($0) }
+                    Picker("Category", selection: $category) {
+                        ForEach(ExpenseCategory.allCases) { c in
+                            Text("\(c.emoji) \(c.rawValue)").tag(c)
+                        }
                     }
 
                     HStack {
@@ -78,7 +82,6 @@ struct AddView: View {
                     }
                 }
 
-                //  NEW: date/time defaults to now, but editable
                 Section("When") {
                     DatePicker(
                         "Date & Time",
@@ -87,7 +90,6 @@ struct AddView: View {
                     )
                 }
 
-                //  NEW: searchable hardcoded stores
                 Section("Store") {
                     TextField("Search stores", text: $storeSearch)
 
@@ -99,7 +101,6 @@ struct AddView: View {
                     }
                 }
 
-                //  NEW: optional description
                 Section("Description (optional)") {
                     TextField("Notes, items, why you bought it…", text: $details, axis: .vertical)
                         .lineLimit(3...6)
@@ -117,17 +118,16 @@ struct AddView: View {
                         return
                     }
 
-                    // If user never picked a store, keep it safe
                     let finalStore = store.isEmpty ? "Other" : store
 
                     let item = ExpenseItem(
                         name: name,
-                        type: type,
+                        category: category,
                         amount: amount,
                         currency: currency.rawValue,
                         date: date,
                         store: finalStore,
-                        details: details // can be blank
+                        details: details
                     )
 
                     expenses.items.append(item)
@@ -140,7 +140,6 @@ struct AddView: View {
                 Text("Please enter numbers only (example: 12.34).")
             }
             .onAppear {
-                // ensure it auto-sets to "now" when sheet opens
                 date = .now
             }
         }
