@@ -37,6 +37,7 @@ struct WeekPoint: Identifiable {
 // ✅ Pie slice model
 struct PieSlice: Identifiable {
     let id = UUID()
+    let key: String      // stable key (used to pick a color)
     let label: String
     let value: Double
 }
@@ -70,6 +71,26 @@ struct StatsView: View {
     private var isoCalendar: Calendar { Calendar(identifier: .iso8601) }
     private var now: Date { Date() }
 
+    // ✅ Category color palette (emoji-ish vibe)
+    // This is ONLY used for the category pie; others default to .tint
+    private var categoryColorScale: [String: Color] {
+        [
+            ExpenseCategory.food.rawValue: .mint,
+            ExpenseCategory.transport.rawValue: .gray,
+            ExpenseCategory.entertainment.rawValue: Color(red: 248.0/255.0, green: 187.0/255.0, blue: 170.0/255.0),
+            ExpenseCategory.clothes.rawValue: .cyan,
+            ExpenseCategory.gift.rawValue: Color(red: 181.0/255.0, green: 161.0/255.0, blue: 79.0/255.0),
+            ExpenseCategory.education.rawValue: .indigo,
+            ExpenseCategory.health.rawValue: Color(red: 255.0/255.0, green: 105.0/255.0, blue: 97.0/255.0),
+            ExpenseCategory.home.rawValue: .brown,
+            ExpenseCategory.fees.rawValue: Color(red: 190.0/255.0, green: 229.0/255.0, blue: 176.0/255.0),
+            ExpenseCategory.videoGames.rawValue: Color(red: 211.0/255.0, green: 211.0/255.0, blue: 211.0/255.0),
+            ExpenseCategory.projects.rawValue: .yellow,
+            ExpenseCategory.other.rawValue: Color(red: 195.0/255.0, green: 146.0/255.0, blue: 97.0/255.0) //195, 146, 97
+        ]
+    }
+
+    // ✅ Timespan filter start date (for pies + totals)
     private var startDate: Date {
         switch range {
         case .last7:
@@ -89,6 +110,7 @@ struct StatsView: View {
         }
     }
 
+    // ✅ These *are* filtered by selected range (pies + totals)
     private var filteredItems: [ExpenseItem] {
         expenses.items
             .filter { $0.date >= startDate && $0.date <= now }
@@ -126,9 +148,11 @@ struct StatsView: View {
                     ForEach(currenciesInRange, id: \.self) { code in
                         let itemsForCurrency = filteredItems.filter { $0.currency == code }
 
-                        let monthTrend = monthByMonthTrend(itemsForCurrency)
-                        let weekTrend = weekByWeekTrend(itemsForCurrency)
+                        // ✅ Trends disregard the range picker (always last 12 months/weeks)
+                        let monthTrend = monthByMonthTrend(allItemsForCurrency(code))
+                        let weekTrend = weekByWeekTrend(allItemsForCurrency(code))
 
+                        // ✅ Pies are filtered by selected range
                         let byStore = pieByStore(itemsForCurrency, topN: 8)
                         let byCategory = pieByCategory(itemsForCurrency)
                         let byTime = pieByTimeBucket(itemsForCurrency)
@@ -160,12 +184,12 @@ struct StatsView: View {
                             Text("Trends (\(code))")
                         }
 
-                        // ✅ Pie charts
                         Section {
                             PieOrFallbackView(
                                 title: "Spending by Company",
                                 slices: byStore,
-                                currencyCode: code
+                                currencyCode: code,
+                                styleScale: nil
                             )
                         }
 
@@ -173,7 +197,8 @@ struct StatsView: View {
                             PieOrFallbackView(
                                 title: "Spending by Category",
                                 slices: byCategory,
-                                currencyCode: code
+                                currencyCode: code,
+                                styleScale: categoryColorScale
                             )
                         }
 
@@ -181,7 +206,8 @@ struct StatsView: View {
                             PieOrFallbackView(
                                 title: "Spending by Time of Day",
                                 slices: byTime,
-                                currencyCode: code
+                                currencyCode: code,
+                                styleScale: nil
                             )
                         }
                     }
@@ -191,7 +217,7 @@ struct StatsView: View {
         }
     }
 
-    // MARK: - Trends (same as before)
+    // MARK: - Trends
 
     private func monthByMonthTrend(_ items: [ExpenseItem]) -> [MonthPoint] {
         let startOfThisMonth = isoCalendar.date(from: isoCalendar.dateComponents([.year, .month], from: now)) ?? now
@@ -250,8 +276,10 @@ struct StatsView: View {
             WeekPoint(start: wStart, label: df.string(from: wStart), total: buckets[wStart, default: 0])
         }
     }
-    
-    
+
+    private func allItemsForCurrency(_ code: String) -> [ExpenseItem] {
+        expenses.items.filter { $0.currency == code }
+    }
 
     // MARK: - Pie aggregations
 
@@ -260,14 +288,14 @@ struct StatsView: View {
             .mapValues { $0.reduce(0) { $0 + $1.amount } }
 
         let sorted = dict
-            .map { PieSlice(label: $0.key, value: $0.value) }
+            .map { PieSlice(key: $0.key, label: $0.key, value: $0.value) }
             .sorted { $0.value > $1.value }
 
         guard sorted.count > topN else { return sorted }
 
         let head = Array(sorted.prefix(topN))
         let otherTotal = sorted.dropFirst(topN).reduce(0) { $0 + $1.value }
-        return head + [PieSlice(label: "Other", value: otherTotal)]
+        return head + [PieSlice(key: "Other", label: "Other", value: otherTotal)]
     }
 
     private func pieByCategory(_ items: [ExpenseItem]) -> [PieSlice] {
@@ -275,30 +303,34 @@ struct StatsView: View {
             .mapValues { $0.reduce(0) { $0 + $1.amount } }
 
         return dict
-            .map { PieSlice(label: "\($0.key.emoji) \($0.key.rawValue)", value: $0.value) }
+            .map {
+                PieSlice(
+                    key: $0.key.rawValue,
+                    label: "\($0.key.emoji) \($0.key.rawValue)",
+                    value: $0.value
+                )
+            }
             .sorted { $0.value > $1.value }
     }
 
     private func pieByTimeBucket(_ items: [ExpenseItem]) -> [PieSlice] {
         let cal = Calendar.current
-
         var totals: [TimeBucket: Double] = [:]
+
         for item in items {
             let h = cal.component(.hour, from: item.date)
             let bucket = TimeBucket.bucket(for: h)
             totals[bucket, default: 0] += item.amount
         }
 
-        // Keep a stable bucket order, but still sort by value desc if you prefer:
-        // return TimeBucket.allCases.map { ... }.filter { ... }
         return TimeBucket.allCases.compactMap { b in
             let v = totals[b, default: 0]
-            return v > 0 ? PieSlice(label: b.rawValue, value: v) : nil
+            return v > 0 ? PieSlice(key: b.rawValue, label: b.rawValue, value: v) : nil
         }
     }
 }
 
-// MARK: - Trend Charts (unchanged)
+// MARK: - Trend Charts
 
 struct TrendChartsView: View {
     let currencyCode: String
@@ -363,6 +395,7 @@ struct PieOrFallbackView: View {
     let title: String
     let slices: [PieSlice]
     let currencyCode: String
+    let styleScale: [String: Color]?
 
     var body: some View {
         if slices.isEmpty {
@@ -374,14 +407,15 @@ struct PieOrFallbackView: View {
                     .font(.headline)
 
                 if #available(iOS 17.0, *) {
-                    PieChartView(slices: slices)
+                    PieChartView(slices: slices, styleScale: styleScale)
                         .frame(height: 220)
 
-                    PieLegendView(slices: slices, currencyCode: currencyCode)
+                    PieLegendView(slices: slices, currencyCode: currencyCode, styleScale: styleScale)
                 } else {
-                    // iOS 16 fallback (keeps the app compiling/running)
-                    StatTableFallbackView(rows: slices.map { StatRow(label: $0.label, value: $0.value) },
-                                          currencyCode: currencyCode)
+                    StatTableFallbackView(
+                        rows: slices.map { StatRow(label: $0.label, value: $0.value) },
+                        currencyCode: currencyCode
+                    )
                 }
             }
             .padding(.vertical, 6)
@@ -392,13 +426,20 @@ struct PieOrFallbackView: View {
 @available(iOS 17.0, *)
 struct PieChartView: View {
     let slices: [PieSlice]
+    let styleScale: [String: Color]?
+
+    private func color(for key: String) -> Color {
+        styleScale?[key] ?? .accentColor
+    }
 
     var body: some View {
         Chart(slices) { s in
             SectorMark(
                 angle: .value("Amount", s.value),
-                innerRadius: .ratio(0.55) // donut style (looks nicer)
+                innerRadius: .ratio(0.55)
             )
+            // ✅ No chartForegroundStyleScale needed — color each slice directly
+            .foregroundStyle(color(for: s.key))
         }
         .chartLegend(.hidden)
     }
@@ -407,18 +448,30 @@ struct PieChartView: View {
 struct PieLegendView: View {
     let slices: [PieSlice]
     let currencyCode: String
+    let styleScale: [String: Color]?
+
+    private func color(for key: String) -> Color {
+        styleScale?[key] ?? .accentColor
+    }
 
     var body: some View {
         let total = slices.reduce(0) { $0 + $1.value }
 
         VStack(spacing: 8) {
             ForEach(slices) { s in
-                HStack {
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(color(for: s.key))
+                        .frame(width: 10, height: 10)
+
                     Text(s.label)
                         .lineLimit(1)
+
                     Spacer()
+
                     Text(s.value, format: .currency(code: currencyCode))
                         .foregroundStyle(.secondary)
+
                     Text(total > 0 ? "  \(Int((s.value / total) * 100))%" : "")
                         .foregroundStyle(.secondary)
                 }
