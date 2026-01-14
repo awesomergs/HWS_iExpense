@@ -47,7 +47,7 @@ struct ExpenseItem: Identifiable, Codable {
         // Backward compatible defaults !!
         currency = try c.decodeIfPresent(String.self, forKey: .currency) ?? "USD"
         date = try c.decodeIfPresent(Date.self, forKey: .date) ?? .now
-        store = try c.decodeIfPresent(String.self, forKey: .store) ?? "Unknown"
+        store = try c.decodeIfPresent(String.self, forKey: .store) ?? "Other"
         details = try c.decodeIfPresent(String.self, forKey: .details) ?? ""
     }
 }
@@ -61,7 +61,7 @@ class Expenses {
             }
         }
     }
-
+    
     init() {
         if let savedItems = UserDefaults.standard.data(forKey: "Items"),
            let decodedItems = try? JSONDecoder().decode([ExpenseItem].self, from: savedItems) {
@@ -92,14 +92,27 @@ struct ContentView: View {
                                 Text(item.amount, format: .currency(code: item.currency))
                                     .font(.headline)
                             }
+                            
+                            let isToday = Calendar.current.isDateInToday(item.date)
+                            let isYear: Bool = Calendar.current.component(.year, from: item.date) == Calendar.current.component(.year, from: Date())
 
-                            Text("\(item.type) • \(item.store)")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                            if isToday {
+                                Text("\(item.date, format: .dateTime.hour().minute()) · \(item.store)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                if isYear{
+                                    Text("\(item.date, format: .dateTime.month().day()) · \(item.store)")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                                else {
+                                    Text("\(item.date, format: .dateTime.month().day().year()) · \(item.store)")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
 
-                            Text(item.date, format: .dateTime.month().day().year().hour().minute())
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
 
                         }
                     }

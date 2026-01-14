@@ -97,12 +97,6 @@ struct AddView: View {
                             Text(s).tag(s)
                         }
                     }
-
-                    if store.isEmpty {
-                        Text("Pick a store (or choose “Other”).")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
                 //  NEW: optional description
@@ -124,7 +118,7 @@ struct AddView: View {
                     }
 
                     // If user never picked a store, keep it safe
-                    let finalStore = store.isEmpty ? "Unknown" : store
+                    let finalStore = store.isEmpty ? "Other" : store
 
                     let item = ExpenseItem(
                         name: name,
