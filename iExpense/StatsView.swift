@@ -89,6 +89,31 @@ struct StatsView: View {
             ExpenseCategory.other.rawValue: Color(red: 195.0/255.0, green: 146.0/255.0, blue: 97.0/255.0) //195, 146, 97
         ]
     }
+    
+    private func storeColorScale(for slices: [PieSlice]) -> [String: Color] {
+        var map: [String: Color] = [:]
+
+        for s in slices {
+            let hash = abs(s.key.hashValue)
+            let hue = Double(hash % 360) / 360.0
+            map[s.key] = Color(hue: hue, saturation: 0.55, brightness: 0.85)
+        }
+
+        return map
+    }
+    
+    private var timeColorScale: [String: Color] {
+        [
+            TimeBucket.morning.rawValue: .yellow,
+            TimeBucket.afternoon.rawValue: .orange,
+            TimeBucket.evening.rawValue: .purple,
+            TimeBucket.night.rawValue: .indigo,
+            TimeBucket.lateNight.rawValue: .blue
+        ]
+    }
+
+    
+    
 
     // ✅ Timespan filter start date (for pies + totals)
     private var startDate: Date {
@@ -189,9 +214,10 @@ struct StatsView: View {
                                 title: "Spending by Company",
                                 slices: byStore,
                                 currencyCode: code,
-                                styleScale: nil
+                                styleScale: storeColorScale(for: byStore)
                             )
                         }
+
 
                         Section {
                             PieOrFallbackView(
@@ -207,9 +233,10 @@ struct StatsView: View {
                                 title: "Spending by Time of Day",
                                 slices: byTime,
                                 currencyCode: code,
-                                styleScale: nil
+                                styleScale: timeColorScale
                             )
                         }
+
                     }
                 }
             }
