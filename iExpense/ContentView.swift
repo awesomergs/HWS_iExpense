@@ -1,7 +1,6 @@
 import Observation
 import SwiftUI
 
-// ✅ NEW: categories with emoji
 enum ExpenseCategory: String, CaseIterable, Identifiable, Codable {
     case food = "Food"
     case transport = "Transport"
@@ -52,7 +51,6 @@ struct ExpenseItem: Identifiable, Codable {
     var id = UUID()
     let name: String
 
-    // ✅ CHANGED: now category, but stored under "type" key for backward compatibility
     let category: ExpenseCategory
 
     let amount: Double
@@ -86,7 +84,6 @@ struct ExpenseItem: Identifiable, Codable {
         self.details = details
     }
 
-    // ✅ Manual encode so we keep using the "type" key (migration-safe)
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
@@ -138,7 +135,6 @@ class Expenses {
     }
 }
 
-// ✅ Root tab view
 struct ContentView: View {
     @State private var expenses = Expenses()
 
@@ -157,12 +153,10 @@ struct ContentView: View {
     }
 }
 
-// ✅ Your list moved into its own view
 struct ExpensesListView: View {
     @State private var showingAddExpense = false
     var expenses: Expenses
 
-    // ✅ Recency sort (newest first)
     var sortedItems: [ExpenseItem] {
         expenses.items.sorted { $0.date > $1.date }
     }
@@ -222,8 +216,6 @@ struct ExpensesListView: View {
     }
 
     func removeItems(_ offsets: IndexSet) {
-        // IMPORTANT: deleting from sorted view needs mapping back to original indices
-        // We'll delete by id to be safe.
         let idsToDelete = offsets.map { sortedItems[$0].id }
         expenses.items.removeAll { idsToDelete.contains($0.id) }
     }

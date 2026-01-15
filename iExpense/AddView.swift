@@ -14,7 +14,6 @@ struct AddView: View {
 
     @State private var name: String = ""
 
-    // ✅ CHANGED: category instead of "Business/Personal"
     @State private var category: ExpenseCategory = .food
 
     // keep user input as text

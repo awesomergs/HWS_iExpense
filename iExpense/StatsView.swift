@@ -1,5 +1,7 @@
 import SwiftUI
 import Charts
+import UniformTypeIdentifiers
+
 
 // Range options: rolling windows + calendar windows
 enum StatsRange: String, CaseIterable, Identifiable {
@@ -19,7 +21,7 @@ struct StatRow: Identifiable {
     let value: Double
 }
 
-// ✅ For trends
+//  For trends
 struct MonthPoint: Identifiable {
     let id = UUID()
     let start: Date
@@ -34,7 +36,7 @@ struct WeekPoint: Identifiable {
     let total: Double
 }
 
-// ✅ Pie slice model
+//  Pie slice model
 struct PieSlice: Identifiable {
     let id = UUID()
     let key: String      // stable key (used to pick a color)
@@ -42,7 +44,7 @@ struct PieSlice: Identifiable {
     let value: Double
 }
 
-// ✅ Time of day buckets (includes your 11–2 afternoon example)
+//  Time of day buckets (includes your 11–2 afternoon example)
 enum TimeBucket: String, CaseIterable, Identifiable {
     case lateNight = "Late Night (12–4)"
     case morning = "Morning (5–10)"
@@ -70,8 +72,13 @@ struct StatsView: View {
     // ISO calendar starts week on Monday
     private var isoCalendar: Calendar { Calendar(identifier: .iso8601) }
     private var now: Date { Date() }
+    
+    // For excel exports
+    @State private var showingShare = false
+    @State private var exportURL: URL?
 
-    // ✅ Category color palette (emoji-ish vibe)
+
+    //  Category color palette (emoji-ish vibe)
     // This is ONLY used for the category pie; others default to .tint
     private var categoryColorScale: [String: Color] {
         [
@@ -115,7 +122,7 @@ struct StatsView: View {
     
     
 
-    // ✅ Timespan filter start date (for pies + totals)
+    //  Timespan filter start date (for pies + totals)
     private var startDate: Date {
         switch range {
         case .last7:
@@ -135,7 +142,7 @@ struct StatsView: View {
         }
     }
 
-    // ✅ These *are* filtered by selected range (pies + totals)
+    //  These *are* filtered by selected range (pies + totals)
     private var filteredItems: [ExpenseItem] {
         expenses.items
             .filter { $0.date >= startDate && $0.date <= now }
@@ -173,11 +180,11 @@ struct StatsView: View {
                     ForEach(currenciesInRange, id: \.self) { code in
                         let itemsForCurrency = filteredItems.filter { $0.currency == code }
 
-                        // ✅ Trends disregard the range picker (always last 12 months/weeks)
+                        //  Trends disregard the range picker (always last 12 months/weeks)
                         let monthTrend = monthByMonthTrend(allItemsForCurrency(code))
                         let weekTrend = weekByWeekTrend(allItemsForCurrency(code))
 
-                        // ✅ Pies are filtered by selected range
+                        //  Pies are filtered by selected range
                         let byStore = pieByStore(itemsForCurrency, topN: 8)
                         let byCategory = pieByCategory(itemsForCurrency)
                         let byTime = pieByTimeBucket(itemsForCurrency)
@@ -241,9 +248,78 @@ struct StatsView: View {
                 }
             }
             .navigationTitle("Stats")
+            .toolbar {
+                Button {
+                    exportURL = exportCSVForCurrentRange()
+                    showingShare = (exportURL != nil)
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+            }
+            .sheet(isPresented: $showingShare) {
+                if let exportURL {
+                    ShareSheet(items: [exportURL])
+                }
+            }
+
+        }
+    }
+    
+    //MARK: - CSV Export
+    private func exportCSVForCurrentRange() -> URL? {
+        // Use filteredItems (already respects the selected range)
+        let items = filteredItems.sorted { $0.date > $1.date }
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        var lines: [String] = []
+        lines.append([
+            "id",
+            "name",
+            "category",
+            "amount",
+            "currency",
+            "date",
+            "store",
+            "details"
+        ].joined(separator: ","))
+
+        for item in items {
+            let row: [String] = [
+                item.id.uuidString.csvEscaped(),
+                item.name.csvEscaped(),
+                item.category.rawValue.csvEscaped(),   // or item.category.csvEscaped() if it's a String
+                String(item.amount).csvEscaped(),
+                item.currency.csvEscaped(),
+                iso.string(from: item.date).csvEscaped(),
+                item.store.csvEscaped(),
+                item.details.csvEscaped()
+            ]
+            lines.append(row.joined(separator: ","))
+        }
+
+        let csv = lines.joined(separator: "\n")
+
+        // Filename like: iExpense_Export_Last 30 days_2026-01-15.csv
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd_HH-mm"
+        let stamp = df.string(from: Date())
+        let safeRange = range.rawValue.replacingOccurrences(of: " ", with: "_")
+        let filename = "iExpense_Export_\(safeRange)_\(stamp).csv"
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+
+        do {
+            try csv.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            print("CSV export failed:", error)
+            return nil
         }
     }
 
+    
     // MARK: - Trends
 
     private func monthByMonthTrend(_ items: [ExpenseItem]) -> [MonthPoint] {
@@ -357,6 +433,29 @@ struct StatsView: View {
     }
 }
 
+// MARK: - Excel Exports
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+extension String {
+    /// Basic CSV escaping: wrap with quotes if needed, and double internal quotes.
+    func csvEscaped() -> String {
+        if contains(",") || contains("\"") || contains("\n") || contains("\r") {
+            return "\"\(replacingOccurrences(of: "\"", with: "\"\""))\""
+        }
+        return self
+    }
+}
+
+
 // MARK: - Trend Charts
 
 struct TrendChartsView: View {
@@ -465,7 +564,7 @@ struct PieChartView: View {
                 angle: .value("Amount", s.value),
                 innerRadius: .ratio(0.55)
             )
-            // ✅ No chartForegroundStyleScale needed — color each slice directly
+            //  No chartForegroundStyleScale needed — color each slice directly
             .foregroundStyle(color(for: s.key))
         }
         .chartLegend(.hidden)
@@ -508,7 +607,7 @@ struct PieLegendView: View {
     }
 }
 
-// iOS 16 fallback “table” view (simple + clean)
+// iOS 16 fallback 'table' view
 struct StatTableFallbackView: View {
     let rows: [StatRow]
     let currencyCode: String
